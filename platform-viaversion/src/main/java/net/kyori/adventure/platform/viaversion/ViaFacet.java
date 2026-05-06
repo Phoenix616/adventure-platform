@@ -45,7 +45,8 @@ import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import net.kyori.adventure.audience.MessageType;
+import net.kyori.adventure.chat.ChatType;
+import net.kyori.adventure.chat.SignedMessage;
 import net.kyori.adventure.identity.Identity;
 import net.kyori.adventure.platform.facet.Facet;
 import net.kyori.adventure.platform.facet.FacetBase;
@@ -247,17 +248,35 @@ public class ViaFacet<V> extends FacetBase<V> implements Facet.Message<V, String
     }
   }
 
-  public static class Chat<V> extends ProtocolBased<V> implements ChatPacket<V, String> {
+  public static class Chat<V> extends ProtocolBased<V> implements Facet.Chat<V, String> {
+    protected static final byte TYPE_CHAT = 0;
+    protected static final byte TYPE_SYSTEM = 1;
+    protected static final byte TYPE_ACTION_BAR = 2;
+
     public Chat(final @NotNull Class<? extends V> viewerClass, final @NotNull Function<V, UserConnection> connectionFunction) {
       super("1_15_2", "1_16", VERSION_HEX_COLOR, "CHAT", viewerClass, connectionFunction, true);
     }
 
     @Override
-    public void sendMessage(final @NotNull V viewer, final @NotNull Identity source, final @NotNull String message, final @NotNull Object type) {
+    public void sendMessage(final @NotNull V viewer, final @NotNull String message) {
+      this.sendMessage(viewer, message, TYPE_SYSTEM, Identity.nil().uuid());
+    }
+
+    @Override
+    public void sendMessage(final @NotNull V viewer, final @NotNull String message, final ChatType.@NotNull Bound boundChatType) {
+      this.sendMessage(viewer, message, TYPE_CHAT, Identity.nil().uuid());
+    }
+
+    @Override
+    public void sendMessage(final @NotNull V viewer, final @NotNull String message, final @NotNull SignedMessage signedMessage, final ChatType.@NotNull Bound boundChatType) {
+      this.sendMessage(viewer, message, TYPE_CHAT, signedMessage.identity().uuid());
+    }
+
+    protected void sendMessage(final @NotNull V viewer, final @NotNull String message, final byte type, final @NotNull UUID source) {
       final PacketWrapper packet = this.createPacket(viewer);
       packet.write(Types.COMPONENT, this.parse(viewer, message));
-      packet.write(Types.BYTE, this.createMessageType(type instanceof MessageType ? (MessageType) type : MessageType.SYSTEM));
-      packet.write(Types.UUID, source.uuid());
+      packet.write(Types.BYTE, type);
+      packet.write(Types.UUID, source);
       this.sendPacket(packet);
     }
   }
@@ -268,13 +287,8 @@ public class ViaFacet<V> extends FacetBase<V> implements Facet.Message<V, String
     }
 
     @Override
-    public byte createMessageType(final @NotNull MessageType type) {
-      return TYPE_ACTION_BAR;
-    }
-
-    @Override
     public void sendMessage(final @NotNull V viewer, final @NotNull String message) {
-      this.sendMessage(viewer, Identity.nil(), message, MessageType.CHAT);
+      this.sendMessage(viewer, message, TYPE_ACTION_BAR, Identity.nil().uuid());
     }
   }
 
